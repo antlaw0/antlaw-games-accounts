@@ -6,3 +6,6 @@ python-dotenv
 psycopg2-binary
 Werkzeug
 PyJWT
+itsdangerous
+sib-api-v3-sdk
+bcrypt
