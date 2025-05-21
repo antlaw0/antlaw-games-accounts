@@ -1,23 +1,22 @@
+import os
 import traceback
-import bcrypt
-from flask import request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 from itsdangerous import URLSafeTimedSerializer
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
-
-import os
-from flask import Flask, render_template
-from flask_cors import CORS
-from models import db, migrate
+from dotenv import load_dotenv
+from models import db, migrate, User
 from auth import auth_bp
 from config import Config
+from werkzeug.security import generate_password_hash
+
+load_dotenv()
 
 # Create app and load config
 app = Flask(__name__)
 app.config.from_object(Config)
-
-serializer = URLSafeTimedSerializer(app.config["SECRET_KEY"])
-
+app.config["BREVO_API_KEY"] = os.getenv("BREVO_API_KEY")
 
 # Enable CORS
 CORS(app)
@@ -26,7 +25,10 @@ CORS(app)
 db.init_app(app)
 migrate.init_app(app, db)
 
-# Register blueprints
+# Serializer for secure tokens
+serializer = URLSafeTimedSerializer(app.config["SECRET_KEY"])
+
+# Register authentication blueprint
 app.register_blueprint(auth_bp, url_prefix="/auth")
 
 # Routes for HTML pages
@@ -56,16 +58,14 @@ def send_reset_link():
             return jsonify({"error": "No account found with that email"}), 404
 
         token = serializer.dumps(email, salt="password-reset")
-
         reset_link = f"{request.host_url}reset-password/{token}"
 
-        # Send email with Brevo
         configuration = sib_api_v3_sdk.Configuration()
         configuration.api_key["api-key"] = app.config["BREVO_API_KEY"]
         api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
 
         email_content = {
-            "sender": {"name": "Antlaw Games", "email": "your@email.com"},
+            "sender": {"name": "Antlaw Games", "email": "antlawgames@gmail.com"},
             "to": [{"email": email}],
             "subject": "Password Reset Request",
             "htmlContent": f"""
@@ -83,7 +83,6 @@ def send_reset_link():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/reset-password/<token>", methods=["GET"])
 def reset_password_page(token):
@@ -106,16 +105,16 @@ def reset_password(token):
         if not user:
             return jsonify({"error": "User not found"}), 404
 
-        hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        user.password_hash = hashed
+        # Hash the new password properly
+        user.password_hash = generate_password_hash(new_password)
         db.session.commit()
+
         return jsonify({"message": "Password has been reset."})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": "Reset failed."}), 500
 
-
 # Run the app
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render sets PORT automatically
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
