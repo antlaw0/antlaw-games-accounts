@@ -2,6 +2,8 @@ import os
 import traceback
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from flask_login import LoginManager, current_user
+
 from itsdangerous import URLSafeTimedSerializer
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -21,6 +23,15 @@ app.config["BREVO_API_KEY"] = os.getenv("BREVO_API_KEY")
 # Enable CORS
 CORS(app)
 
+# Initialize login manager
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+# Register user_loader for flask-login
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
+
 # Initialize DB and migrations
 db.init_app(app)
 migrate.init_app(app, db)
@@ -35,14 +46,6 @@ app.register_blueprint(auth_bp, url_prefix="/auth")
 @app.route("/")
 def index():
     return render_template("index.html")
-
-@app.route("/login")
-def login():
-    return render_template("login.html")
-
-@app.route("/register")
-def register():
-    return render_template("register.html")
 
 @app.route("/forgot-password")
 def forgot_password():
@@ -84,6 +87,10 @@ def send_reset_link():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+@app.context_processor
+def inject_user():
+    return dict(current_user=current_user)
+
 @app.route("/reset-password/<token>", methods=["GET"])
 def reset_password_page(token):
     try:
@@ -105,8 +112,7 @@ def reset_password(token):
         if not user:
             return jsonify({"error": "User not found"}), 404
 
-        # Hash the new password properly
-        user.password_hash = generate_password_hash(new_password)
+        user.set_password(new_password)
         db.session.commit()
 
         return jsonify({"message": "Password has been reset."})
@@ -114,7 +120,17 @@ def reset_password(token):
         traceback.print_exc()
         return jsonify({"error": "Reset failed."}), 500
 
-# Run the app
+from flask_login import login_required
+
+@app.route("/whoami")
+@login_required
+def whoami():
+    return f"You are logged in as {current_user.email}"
+
+print("SECRET_KEY loaded:", app.config["SECRET_KEY"])
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    with app.app_context():
+        db.create_all()
+    app.run(host="0.0.0.0", port=5000)
