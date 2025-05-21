@@ -28,36 +28,25 @@ def register():
 
     return jsonify({"message": "Registered successfully"})
 
-@auth_bp.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        return render_template("login.html")
-
+@auth_bp.route("/register", methods=["POST"])
+def register():
     data = get_form_data()
-    email = data.get("email")
-    password = data.get("password")
 
-    if not email or not password:
-        if request.headers.get("Accept") == "application/json":
-            return jsonify({"error": "Email and password required"}), 400
-        flash("Email and password required.")
-        return redirect(url_for("auth.login"))
+    if not data:
+        return jsonify({"error": "Invalid request data"}), 400
 
-    user = User.query.filter_by(email=email).first()
+    if User.query.filter_by(email=data["email"]).first():
+        return jsonify({"error": "Email already exists"}), 400
 
-    if user and user.check_password(password):
-        token = generate_token(user.id)
-        session["user_id"] = user.id
+    user = User(email=data["email"])
+    user.set_password(data["password"])
+    db.session.add(user)
+    db.session.commit()
 
-        if request.headers.get("Accept") == "application/json":
-            return jsonify({"token": token})
-
-        return redirect(url_for("index"))
-    else:
-        if request.headers.get("Accept") == "application/json":
-            return jsonify({"error": "Invalid credentials"}), 401
-        flash("Invalid email or password.")
-        return redirect(url_for("auth.login"))
+    # For HTML form, redirect. Otherwise, return JSON.
+    if request.headers.get("Accept") == "application/json":
+        return jsonify({"message": "Registered successfully"})
+    return redirect(url_for("auth.login"))
 
 @auth_bp.route("/verify_token", methods=["POST"])
 def verify():
