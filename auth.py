@@ -1,11 +1,19 @@
 from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, session
-from flask_login import login_user, logout_user, login_required
+from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 from models import db, User
 from utils import generate_token, verify_token
 
+from flask_jwt_extended import (
+    create_access_token,
+    jwt_required,
+    get_jwt_identity
+)
+from datetime import timedelta
+
 auth_bp = Blueprint("auth", __name__)
 
+### --- HTML form-based registration ---
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
@@ -35,33 +43,99 @@ def register():
         return redirect(url_for("auth.login"))
     return jsonify({"message": "Registered successfully"}), 200
 
-@auth_bp.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email")
-        password = request.form.get("password")
-        user = User.query.filter_by(email=email).first()
+### --- HTML form-based login ---
+@auth_bp.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
 
-        if user and user.check_password(password):
-            login_user(user, remember=True)
-            flash("Login successful!")
-            return redirect(url_for("index"))
-        else:
-            flash("Invalid email or password.")
-            return redirect(url_for("auth.login"))
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
 
-    if "user_id" in session:
-        return redirect(url_for("index"))
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return jsonify({"error": "Invalid credentials"}), 401
 
-    return render_template("login.html")
+    access_token = create_access_token(identity=user.id, expires_delta=timedelta(hours=1))
+    return jsonify({
+        "access_token": access_token,
+        "user_id": user.id
+    }), 200
 
+### --- HTML logout ---
 @auth_bp.route("/logout", methods=["GET"])
 @login_required
 def logout():
     logout_user()
     return redirect(url_for("index"))
 
+### --- API: Register a user ---
+@auth_bp.route("/api/register", methods=["POST"])
+def api_register():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+    confirm = data.get("confirm") or data.get("confirm_password")
 
+    if not email or not password or not confirm:
+        return jsonify({"error": "Missing fields"}), 400
+    if password != confirm:
+        return jsonify({"error": "Passwords do not match"}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already registered"}), 400
+
+    user = User(email=email)
+    user.set_password(password)
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({"message": "User registered successfully"}), 201
+
+### --- API: Login and get access token ---
+@auth_bp.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    access_token = create_access_token(identity=user.id, expires_delta=timedelta(hours=1))
+    return jsonify({
+        "access_token": access_token,
+        "user_id": user.id
+    }), 200
+
+### --- API: Get info about current logged-in user ---
+@auth_bp.route("/api/userinfo", methods=["GET"])
+@jwt_required()
+def api_userinfo():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify({
+        "id": user.id,
+        "email": user.email,
+        "created_at": user.created_at.isoformat() if user.created_at else None
+    })
+
+### --- API: Logout placeholder (client-side only for JWT) ---
+@auth_bp.route("/api/logout", methods=["POST"])
+@jwt_required()
+def api_logout():
+    # JWTs are stateless, logout is handled client-side by deleting token
+    return jsonify({"message": "Logout successful (client should delete token)"}), 200
+
+### --- Token verification (if you're still using it for other systems) ---
 @auth_bp.route("/verify_token", methods=["POST"])
 def verify():
     data = request.get_json() or request.form
@@ -73,3 +147,32 @@ def verify():
     if payload:
         return jsonify({"user_id": payload["user_id"]}), 200
     return jsonify({"error": "Invalid token"}), 401
+
+### --- API: Reset password via token ---
+@auth_bp.route("/api/reset_password", methods=["POST"])
+def api_reset_password():
+    data = request.get_json()
+    token = data.get("token")
+    password = data.get("password")
+    confirm = data.get("confirm") or data.get("confirm_password")
+
+    if not token or not password or not confirm:
+        return jsonify({"error": "All fields are required"}), 400
+    if password != confirm:
+        return jsonify({"error": "Passwords do not match"}), 400
+    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password) or not any(c in "!@#$%^&*" for c in password):
+        return jsonify({"error": "Password must be at least 8 characters and include an uppercase letter, number, and special character"}), 400
+
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"error": "Invalid or expired token"}), 400
+
+    user_id = payload.get("user_id")
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.set_password(password)
+    db.session.commit()
+
+    return jsonify({"message": "Password has been reset successfully"}), 200

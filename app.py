@@ -13,6 +13,8 @@ from auth import auth_bp
 from config import Config
 from werkzeug.security import generate_password_hash
 
+from flask_jwt_extended import JWTManager
+
 load_dotenv()
 
 # Create app and load config
@@ -20,10 +22,10 @@ app = Flask(__name__)
 app.config.from_object(Config)
 app.config["BREVO_API_KEY"] = os.getenv("BREVO_API_KEY")
 
-# Enable CORS
-CORS(app)
+# Enable CORS for API routes (adjust origins as needed)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# Initialize login manager
+# Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 
@@ -38,6 +40,9 @@ migrate.init_app(app, db)
 
 # Serializer for secure tokens
 serializer = URLSafeTimedSerializer(app.config["SECRET_KEY"])
+
+# Initialize JWT Manager
+jwt = JWTManager(app)
 
 # Register authentication blueprint
 app.register_blueprint(auth_bp, url_prefix="/auth")
