@@ -92,9 +92,9 @@ def api_register():
 
     return jsonify({"message": "User registered successfully"}), 201
 
-### --- API: Login and get access token ---
-@auth_bp.route("/api/login", methods=["POST"])
-def api_login():
+### --- API: Login and get access token (renamed to avoid conflict) ---
+@auth_bp.route("/api/login_token", methods=["POST"])
+def api_login_token():
     data = request.get_json()
     email = data.get("email")
     password = data.get("password")
@@ -160,19 +160,18 @@ def api_reset_password():
         return jsonify({"error": "All fields are required"}), 400
     if password != confirm:
         return jsonify({"error": "Passwords do not match"}), 400
-    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password) or not any(c in "!@#$%^&*" for c in password):
-        return jsonify({"error": "Password must be at least 8 characters and include an uppercase letter, number, and special character"}), 400
+    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password) or not any(c.islower() for c in password):
+        return jsonify({"error": "Password must be at least 8 characters long, include uppercase, lowercase, and a number"}), 400
 
     payload = verify_token(token)
     if not payload:
-        return jsonify({"error": "Invalid or expired token"}), 400
+        return jsonify({"error": "Invalid or expired token"}), 401
 
-    user_id = payload.get("user_id")
-    user = User.query.get(user_id)
+    user = User.query.get(payload["user_id"])
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     user.set_password(password)
     db.session.commit()
 
-    return jsonify({"message": "Password has been reset successfully"}), 200
+    return jsonify({"message": "Password reset successful"}), 200
