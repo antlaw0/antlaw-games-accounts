@@ -71,33 +71,6 @@ def logout():
     logout_user()
     return redirect(url_for("index"))
 
-# ✅ FIXED: Add CORS support and handle OPTIONS request
-@auth_bp.route("/api/register", methods=["POST", "OPTIONS"])
-@cross_origin(origins="https://ai-game-azzk.onrender.com")
-def api_register():
-    print("✅ Hit /api/register route")
-    if request.method == "OPTIONS":
-        return '', 200
-
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
-    confirm = data.get("confirm") or data.get("confirm_password")
-
-    if not email or not password or not confirm:
-        return jsonify({"error": "Missing fields"}), 400
-    if password != confirm:
-        return jsonify({"error": "Passwords do not match"}), 400
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "Email already registered"}), 400
-
-    user = User(email=email)
-    user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
-
-    return jsonify({"message": "User registered successfully"}), 201
-
 @auth_bp.route("/api/login_token", methods=["POST"])
 def api_login_token():
     data = request.get_json()
