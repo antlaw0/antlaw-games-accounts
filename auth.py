@@ -3,17 +3,12 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 from models import db, User
 from utils import generate_token, verify_token
-
-from flask_jwt_extended import (
-    create_access_token,
-    jwt_required,
-    get_jwt_identity
-)
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from datetime import timedelta
+from flask_cors import cross_origin
 
 auth_bp = Blueprint("auth", __name__)
 
-### --- HTML form-based registration ---
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     print("⚠️ Hit /register route")
@@ -41,11 +36,9 @@ def register():
     db.session.commit()
 
     if request.headers.get("Accept") != "application/json":
-        # Avoid error from missing 'auth.login' endpoint
-        return redirect("/")  # Redirect to safe default page
+        return redirect("/")  # Avoid broken redirect
     return jsonify({"message": "Registered successfully"}), 200
 
-### --- HTML form-based login (for frontend forms if needed) ---
 @auth_bp.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json()
@@ -65,17 +58,20 @@ def api_login():
         "user_id": user.id
     }), 200
 
-### --- HTML logout ---
 @auth_bp.route("/logout", methods=["GET"])
 @login_required
 def logout():
     logout_user()
     return redirect(url_for("index"))
 
-### --- API: Register a user ---
-@auth_bp.route("/api/register", methods=["POST"])
+# ✅ FIXED: Add CORS support and handle OPTIONS request
+@auth_bp.route("/api/register", methods=["POST", "OPTIONS"])
+@cross_origin(origins="https://ai-game-azzk.onrender.com")
 def api_register():
     print("✅ Hit /api/register route")
+    if request.method == "OPTIONS":
+        return '', 200
+
     data = request.get_json()
     email = data.get("email")
     password = data.get("password")
@@ -95,7 +91,6 @@ def api_register():
 
     return jsonify({"message": "User registered successfully"}), 201
 
-### --- API: Login and get access token ---
 @auth_bp.route("/api/login_token", methods=["POST"])
 def api_login_token():
     data = request.get_json()
@@ -115,7 +110,6 @@ def api_login_token():
         "user_id": user.id
     }), 200
 
-### --- API: Get info about current logged-in user ---
 @auth_bp.route("/api/userinfo", methods=["GET"])
 @jwt_required()
 def api_userinfo():
@@ -131,13 +125,11 @@ def api_userinfo():
         "created_at": user.created_at.isoformat() if user.created_at else None
     })
 
-### --- API: Logout placeholder (client-side only for JWT) ---
 @auth_bp.route("/api/logout", methods=["POST"])
 @jwt_required()
 def api_logout():
     return jsonify({"message": "Logout successful (client should delete token)"}), 200
 
-### --- Token verification (if you're still using it for other systems) ---
 @auth_bp.route("/verify_token", methods=["POST"])
 def verify():
     data = request.get_json() or request.form
@@ -150,7 +142,6 @@ def verify():
         return jsonify({"user_id": payload["user_id"]}), 200
     return jsonify({"error": "Invalid token"}), 401
 
-### --- API: Reset password via token ---
 @auth_bp.route("/api/reset_password", methods=["POST"])
 def api_reset_password():
     data = request.get_json()
@@ -162,18 +153,12 @@ def api_reset_password():
         return jsonify({"error": "All fields are required"}), 400
     if password != confirm:
         return jsonify({"error": "Passwords do not match"}), 400
-    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password):
-        return jsonify({"error": "Password does not meet complexity requirements"}), 400
 
-    payload = verify_token(token)
-    if not payload:
-        return jsonify({"error": "Invalid or expired token"}), 401
-
-    user = User.query.get(payload["user_id"])
+    user_id = verify_token(token).get("user_id")
+    user = User.query.get(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": "Invalid token"}), 400
 
     user.set_password(password)
     db.session.commit()
-
-    return jsonify({"message": "Password reset successful"}), 200
+    return jsonify({"message": "Password reset successfully"}), 200
