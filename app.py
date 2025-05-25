@@ -20,6 +20,12 @@ jwt = JWTManager(app)
 # ✅ CORS now allows requests from AI game site
 CORS(app, resources={r"/api/*": {"origins": "https://ai-game-azzk.onrender.com"}})
 
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
 app.register_blueprint(auth_bp)
 
 @app.route("/")
