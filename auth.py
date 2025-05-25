@@ -9,35 +9,42 @@ from flask_cors import cross_origin
 
 auth_bp = Blueprint("auth", __name__)
 
-@auth_bp.route("/register", methods=["GET", "POST"])
-def register():
-    print("⚠️ Hit /register route")
-    if request.method == "GET":
-        return render_template("register.html")
+@auth_bp.route("/api/register", methods=["POST", "OPTIONS"])
+@cross_origin(origins="https://ai-game-azzk.onrender.com")  # Your frontend's origin
+def api_register():
+    print("✅ Hit /api/register route")
 
-    data = request.get_json() if request.is_json else request.form
-    if not data:
-        return jsonify({"error": "No data received"}), 400
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        return '', 200
 
-    email = data.get("email")
-    password = data.get("password")
-    confirm = data.get("confirm") or data.get("confirm_password")
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Missing JSON body"}), 400
 
-    if not email or not password or not confirm:
-        return jsonify({"error": "Email and password fields are required"}), 400
-    if password != confirm:
-        return jsonify({"error": "Passwords do not match"}), 400
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "Email already exists"}), 400
+        email = data.get("email")
+        password = data.get("password")
+        confirm = data.get("confirm") or data.get("confirm_password")
 
-    user = User(email=email)
-    user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
+        if not email or not password or not confirm:
+            return jsonify({"error": "Missing fields"}), 400
+        if password != confirm:
+            return jsonify({"error": "Passwords do not match"}), 400
+        if User.query.filter_by(email=email).first():
+            return jsonify({"error": "Email already registered"}), 400
 
-    if request.headers.get("Accept") != "application/json":
-        return redirect("/")  # Avoid broken redirect
-    return jsonify({"message": "Registered successfully"}), 200
+        user = User(email=email)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+
+        return jsonify({"message": "User registered successfully"}), 201
+
+    except Exception as e:
+        print("❌ Registration Error:", str(e))
+        return jsonify({"error": "Server error"}), 500
+
 
 @auth_bp.route("/api/login", methods=["POST"])
 def api_login():
