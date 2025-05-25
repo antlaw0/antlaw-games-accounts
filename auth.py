@@ -16,6 +16,7 @@ auth_bp = Blueprint("auth", __name__)
 ### --- HTML form-based registration ---
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
+    print("⚠️ Hit /register route")
     if request.method == "GET":
         return render_template("register.html")
 
@@ -40,10 +41,11 @@ def register():
     db.session.commit()
 
     if request.headers.get("Accept") != "application/json":
-        return redirect(url_for("auth.login"))
+        # Avoid error from missing 'auth.login' endpoint
+        return redirect("/")  # Redirect to safe default page
     return jsonify({"message": "Registered successfully"}), 200
 
-### --- HTML form-based login ---
+### --- HTML form-based login (for frontend forms if needed) ---
 @auth_bp.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json()
@@ -73,6 +75,7 @@ def logout():
 ### --- API: Register a user ---
 @auth_bp.route("/api/register", methods=["POST"])
 def api_register():
+    print("✅ Hit /api/register route")
     data = request.get_json()
     email = data.get("email")
     password = data.get("password")
@@ -92,7 +95,7 @@ def api_register():
 
     return jsonify({"message": "User registered successfully"}), 201
 
-### --- API: Login and get access token (renamed to avoid conflict) ---
+### --- API: Login and get access token ---
 @auth_bp.route("/api/login_token", methods=["POST"])
 def api_login_token():
     data = request.get_json()
@@ -132,7 +135,6 @@ def api_userinfo():
 @auth_bp.route("/api/logout", methods=["POST"])
 @jwt_required()
 def api_logout():
-    # JWTs are stateless, logout is handled client-side by deleting token
     return jsonify({"message": "Logout successful (client should delete token)"}), 200
 
 ### --- Token verification (if you're still using it for other systems) ---
@@ -160,8 +162,8 @@ def api_reset_password():
         return jsonify({"error": "All fields are required"}), 400
     if password != confirm:
         return jsonify({"error": "Passwords do not match"}), 400
-    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password) or not any(c.islower() for c in password):
-        return jsonify({"error": "Password must be at least 8 characters long, include uppercase, lowercase, and a number"}), 400
+    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password):
+        return jsonify({"error": "Password does not meet complexity requirements"}), 400
 
     payload = verify_token(token)
     if not payload:
