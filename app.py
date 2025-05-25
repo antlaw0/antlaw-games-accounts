@@ -23,7 +23,7 @@ app.config.from_object(Config)
 app.config["BREVO_API_KEY"] = os.getenv("BREVO_API_KEY")
 
 # Enable CORS for API routes (adjust origins as needed)
-CORS(app, resources={r"/api/*": {"origins": "https://ai-game-azzk.onrender.com/"}})
+CORS(app, resources={r"/api/*": {"origins": "https://ai-game-azzk.onrender.com"}})
 
 # Initialize Flask-Login
 login_manager = LoginManager()
