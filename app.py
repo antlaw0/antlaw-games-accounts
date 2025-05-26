@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
+from extensions import db
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
@@ -13,10 +13,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///use
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=True)
 
-# Initialize DB
-db = SQLAlchemy(app)
 
-# Import User model after db is created
+db.init_app(app)
+
+# Import model AFTER db.init_app to avoid circular import
 from models import User
 
 
