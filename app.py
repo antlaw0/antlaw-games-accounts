@@ -9,12 +9,9 @@ from datetime import datetime, timedelta
 # Initialize app and configs
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback_secret')
-CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=True)
-
-# Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-default-secret')
+CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=True)
 
 # Initialize DB
 db = SQLAlchemy(app)
@@ -30,6 +27,7 @@ def register():
     email = data.get('email')
     password = data.get('password')
     confirm = data.get('confirm')
+
     print("email:", email)
     print("password:", password)
     print("confirm:", confirm)
