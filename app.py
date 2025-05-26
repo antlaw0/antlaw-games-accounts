@@ -1,33 +1,56 @@
 from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
-import datetime
 import os
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv("SECRET_KEY")  # Replace with a secure key
-CORS(app, origins=['https://ai-game-azzk.onrender.com'])  # Replace with your actual AI game URL
+from datetime import datetime, timedelta
 
-# In-memory user storage for demonstration purposes
-users = {}
+# Initialize app and configs
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback_secret')
+CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=True)
+
+# Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///users.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-default-secret')
+
+# Initialize DB
+db = SQLAlchemy(app)
+
+# Import User model after db is created
+from models import User
+
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    data = request.get_json()
+    data = request.get_json(force=True)
+    print("Received data:", data)
     email = data.get('email')
     password = data.get('password')
-    confirm_password = data.get('confirm_password')
+    confirm = data.get('confirm')
+    print("email:", email)
+    print("password:", password)
+    print("confirm:", confirm)
 
-    if not email or not password or not confirm_password:
+    if not email or not password or not confirm:
         return jsonify({'error': 'Missing fields'}), 400
-    if password != confirm_password:
+
+    if password != confirm:
         return jsonify({'error': 'Passwords do not match'}), 400
-    if email in users:
+
+    if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already registered'}), 400
 
     hashed_password = generate_password_hash(password)
-    users[email] = {'password': hashed_password}
-    return jsonify({'message': 'User registered successfully'}), 201
+
+    new_user = User(email=email, password=hashed_password)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'Account created successfully'}), 201
+
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -35,33 +58,23 @@ def login():
     email = data.get('email')
     password = data.get('password')
 
-    user = users.get(email)
-    if not user or not check_password_hash(user['password'], password):
-        return jsonify({'error': 'Invalid credentials'}), 401
+    if not email or not password:
+        return jsonify({'error': 'Missing fields'}), 400
 
-    token = jwt.encode({
-        'email': email,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-    }, app.config['SECRET_KEY'], algorithm='HS256')
-    return jsonify({'token': token}), 200
+    user = User.query.filter_by(email=email).first()
 
-@app.route('/api/user', methods=['GET'])
-def get_user():
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
+    if not user or not check_password_hash(user.password, password):
+        return jsonify({'error': 'Invalid email or password'}), 401
 
-    token = auth_header.split(" ")[1]
-    try:
-        data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-        email = data['email']
-        if email not in users:
-            return jsonify({'error': 'User not found'}), 404
-        return jsonify({'email': email}), 200
-    except jwt.ExpiredSignatureError:
-        return jsonify({'error': 'Token expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'error': 'Invalid token'}), 401
+    token_payload = {
+        'user_id': user.id,
+        'email': user.email,
+        'exp': datetime.utcnow() + timedelta(hours=2)
+    }
+    token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+    return jsonify({'message': 'Login successful', 'token': token}), 200
+
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000)
