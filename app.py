@@ -19,7 +19,7 @@ CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=Tr
 
 
 db.init_app(app)
-a
+
 # Import model AFTER db.init_app to avoid circular import
 from models import User
 
