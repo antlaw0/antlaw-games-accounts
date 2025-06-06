@@ -6,8 +6,12 @@ import jwt
 import os
 from datetime import datetime, timedelta
 
+import logging
+logging.getLogger('flask_cors').level = logging.DEBUG
+
 # Initialize app and configs
 app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5001", "https://your-production-frontend.com"]}}, supports_credentials=True)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback_secret')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -15,13 +19,15 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True
 }
 
-CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=True)
-
+# tempoarily allowing all since in local testing
+#CORS(app, origins=['https://ai-game-azzk.onrender.com'], supports_credentials=True)
 
 db.init_app(app)
 
 # Import model AFTER db.init_app to avoid circular import
 from models import User
+
+
 
 
 @app.route('/api/register', methods=['POST'])
@@ -79,4 +85,4 @@ def login():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
