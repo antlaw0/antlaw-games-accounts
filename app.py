@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import requests
 from extensions import db
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -28,19 +29,12 @@ db.init_app(app)
 from models import User
 
 
-
-
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.get_json(force=True)
-    print("Received data:", data)
     email = data.get('email')
     password = data.get('password')
     confirm = data.get('confirm')
-
-    print("email:", email)
-    print("password:", password)
-    print("confirm:", confirm)
 
     if not email or not password or not confirm:
         return jsonify({'error': 'Missing fields'}), 400
@@ -52,13 +46,16 @@ def register():
         return jsonify({'error': 'Email already registered'}), 400
 
     hashed_password = generate_password_hash(password)
-
     new_user = User(email=email, password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({'message': 'Account created successfully'}), 201
+    try:
+        requests.post("http://localhost:5001/api/register-user", json={"id": email})
+    except requests.exceptions.RequestException as e:
+        print("❌ Failed to sync user to game server:", e)
 
+    return jsonify({'message': 'Account created'}), 201
 
 @app.route('/api/login', methods=['POST'])
 def login():
